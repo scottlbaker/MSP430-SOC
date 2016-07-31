@@ -1,0 +1,907 @@
+
+;=======================================================
+;=======================================================
+;  MSP430 SOC mini monitor
+;=======================================================
+;=======================================================
+
+; UART register addresses
+;
+.set u1cntl = 0x0000
+.set u1stat = 0x0000
+.set u1brsr = 0x0002
+.set u1mask = 0x0004
+.set u1data = 0x0006
+
+; UART baud rate
+;
+.set baud   = 0x78e3
+
+; UART status register bit definitions
+;
+.set frmerr  = 0x40
+.set prterr  = 0x20
+.set ovrerr  = 0x10
+.set txempt  = 0x08
+.set txnotf  = 0x04
+.set rxfull  = 0x02
+.set rxnote  = 0x01
+
+; Timer register addresses
+;
+.set t1cntl  = 0x0008
+.set t1stat  = 0x0008
+.set t1icnt  = 0x000a
+
+.set tm5sec  = 0x1388    ; 5 seconds
+.set tmstrt  = 0x0001    ; start timer
+.set tmdone  = 0x0001    ; timer done
+.set tmstop  = 0x0000    ; stop timer
+
+; Other register address
+;
+.set oporta  = 0x000c    ; port A
+.set imask   = 0x000d    ; interrupt mask
+.set r8cntl  = 0x000e    ; random number start/stop
+.set r8data  = 0x000f    ; random number
+.set r8mask  = 0x000f    ; random number mask
+.set isrc    = 0x0010    ; interrupt source
+
+; Initial Stack Pointer
+;
+.set stktop  = 0xff00    ; top of RAM space
+
+
+;===========================================================
+; Start Point
+;===========================================================
+.org 0xe000
+
+start:  mov     #0xff00, r1        ; Initialize stack pointer
+
+0xe000: 0x4031 mov.w #0xff00, SP                        cycles: 2
+0xe002: 0xff00
+
+        call    #initu1            ; init the UART
+
+0xe004: 0x12b0 call #0xe080                             cycles: 5
+0xe006: 0xe080
+
+        mov     #banner, r4        ; r4 gets string pointer
+
+0xe008: 0x4034 mov.w #0xe1ce, r4                        cycles: 2
+0xe00a: 0xe1ce
+
+        call    #puts              ; print banner
+
+0xe00c: 0x12b0 call #0xe08e                             cycles: 5
+0xe00e: 0xe08e
+
+
+main:   mov     #prompt, r4        ; r4 gets string pointer
+
+0xe010: 0x4034 mov.w #0xe1ec, r4                        cycles: 2
+0xe012: 0xe1ec
+
+        call    #puts              ; print prompt
+
+0xe014: 0x12b0 call #0xe08e                             cycles: 5
+0xe016: 0xe08e
+
+
+        call    #getc              ; get a char
+
+0xe018: 0x12b0 call #0xe0a8                             cycles: 5
+0xe01a: 0xe0a8
+
+        call    #putc              ; put a char
+
+0xe01c: 0x12b0 call #0xe09c                             cycles: 5
+0xe01e: 0xe09c
+
+        call    #touppr            ; to upper case
+
+0xe020: 0x12b0 call #0xe17e                             cycles: 5
+0xe022: 0xe17e
+
+
+        cmp.b   #0x48, r5          ; H: help
+
+0xe024: 0x9075 cmp.b #0x48, r5                          cycles: 2
+0xe026: 0x0048
+
+        jz      cxhelp
+
+0xe028: 0x2416 jeq 0xe056  (offset: 44)                 cycles: 2
+
+
+        cmp.b   #0x43, r5          ; C: clear screen
+
+0xe02a: 0x9075 cmp.b #0x43, r5                          cycles: 2
+0xe02c: 0x0043
+
+        jz      cxclr
+
+0xe02e: 0x2418 jeq 0xe060  (offset: 48)                 cycles: 2
+
+
+        cmp.b   #0x52, r5          ; R: restart
+
+0xe030: 0x9075 cmp.b #0x52, r5                          cycles: 2
+0xe032: 0x0052
+
+        jz      start
+
+0xe034: 0x27e5 jeq 0xe000  (offset: -54)                cycles: 2
+
+
+        cmp.b   #0x4f, r5          ; O: output to port
+
+0xe036: 0x9075 cmp.b #0x4f, r5                          cycles: 2
+0xe038: 0x004f
+
+        jz      cxout
+
+0xe03a: 0x2417 jeq 0xe06a  (offset: 46)                 cycles: 2
+
+
+        cmp.b   #0x47, r5          ; G: goto address
+
+0xe03c: 0x9075 cmp.b #0x47, r5                          cycles: 2
+0xe03e: 0x0047
+
+        jz      cxgoto
+
+0xe040: 0x2417 jeq 0xe070  (offset: 46)                 cycles: 2
+
+
+        cmp.b   #0x44, r5          ; D: dump memory
+
+0xe042: 0x9075 cmp.b #0x44, r5                          cycles: 2
+0xe044: 0x0044
+
+        jz      cxdump
+
+0xe046: 0x2417 jeq 0xe076  (offset: 46)                 cycles: 2
+
+
+        cmp.b   #0x0d,  r5         ; enter key
+
+0xe048: 0x9075 cmp.b #0x0d, r5                          cycles: 2
+0xe04a: 0x000d
+
+        jz      main
+
+0xe04c: 0x27e1 jeq 0xe010  (offset: -62)                cycles: 2
+
+
+        mov     #unknwn, r4        ; unknown command
+
+0xe04e: 0x4034 mov.w #0xe2b3, r4                        cycles: 2
+0xe050: 0xe2b3
+
+        call    #puts
+
+0xe052: 0x12b0 call #0xe08e                             cycles: 5
+0xe054: 0xe08e
+
+
+cxhelp: mov     #hlpmsg, r4        ; help message
+
+0xe056: 0x4034 mov.w #0xe1f1, r4                        cycles: 2
+0xe058: 0xe1f1
+
+        call    #puts
+
+0xe05a: 0x12b0 call #0xe08e                             cycles: 5
+0xe05c: 0xe08e
+
+        jmp     main
+
+0xe05e: 0x3fd8 jmp 0xe010  (offset: -80)                cycles: 2
+
+
+cxclr:  mov     #clrscr, r4        ; clear the screen
+
+0xe060: 0x4034 mov.w #0xe2dd, r4                        cycles: 2
+0xe062: 0xe2dd
+
+        call    #puts
+
+0xe064: 0x12b0 call #0xe08e                             cycles: 5
+0xe066: 0xe08e
+
+        jmp     main
+
+0xe068: 0x3fd3 jmp 0xe010  (offset: -90)                cycles: 2
+
+
+cxout:  add     #1, &oporta        ; blink LEDs
+
+0xe06a: 0x5392 add.w #1, &0x000c                        cycles: 4
+0xe06c: 0x000c
+
+        jmp     main
+
+0xe06e: 0x3fd0 jmp 0xe010  (offset: -96)                cycles: 2
+
+
+cxgoto: call    #getadr            ; get  address
+
+0xe070: 0x12b0 call #0xe0b4                             cycles: 5
+0xe072: 0xe0b4
+
+        mov     r10, r0            ; goto address
+
+0xe074: 0x4a00 mov.w r10, PC                            cycles: 2
+
+
+cxdump: call    #getadr            ; get  address
+
+0xe076: 0x12b0 call #0xe0b4                             cycles: 5
+0xe078: 0xe0b4
+
+        call    #dmpmem            ; dump memory
+
+0xe07a: 0x12b0 call #0xe11c                             cycles: 5
+0xe07c: 0xe11c
+
+        jmp     main
+
+0xe07e: 0x3fc8 jmp 0xe010  (offset: -112)               cycles: 2
+
+
+
+;===========================================================
+; Initialize the UART
+;===========================================================
+initu1: mov     #baud, &u1brsr     ; baud rate
+
+0xe080: 0x40b2 mov.w #0x78e3, &0x0002                   cycles: 5
+0xe082: 0x78e3
+0xe084: 0x0002
+
+        mov     #0x3,  &u1cntl     ; enable tx and rx
+
+0xe086: 0x40b2 mov.w #0x0003, &0x0000                   cycles: 5
+0xe088: 0x0003
+0xe08a: 0x0000
+
+        ret
+
+0xe08c: 0x4130 ret   --  mov.w @SP+, PC                 cycles: 3
+
+
+;===========================================================
+; Send a string to the UART
+;   r4 contains pointer to string
+;   r5 gets the next character
+;===========================================================
+puts:   mov.b   @r4+, r5           ; load r5 with next char
+
+0xe08e: 0x4475 mov.b @r4+, r5                           cycles: 2
+
+        cmp.b   #0,   r5           ; check for end of string
+
+0xe090: 0x9345 cmp.b #0, r5                             cycles: 1
+
+        jz      putx               ; exit if done
+
+0xe092: 0x2403 jeq 0xe09a  (offset: 6)                  cycles: 2
+
+        call    #putc              ; put a character
+
+0xe094: 0x12b0 call #0xe09c                             cycles: 5
+0xe096: 0xe09c
+
+        jmp     puts               ; repeat
+
+0xe098: 0x3ffa jmp 0xe08e  (offset: -12)                cycles: 2
+
+putx:   ret
+
+0xe09a: 0x4130 ret   --  mov.w @SP+, PC                 cycles: 3
+
+
+;===========================================================
+; Send a single character to the UART
+;   r5 has the character to send
+;===========================================================
+putc:   bit.b   #txnotf, &u1stat   ; TX full?
+
+0xe09c: 0xb2e2 bit.b #4, &0x0000                        cycles: 4
+0xe09e: 0x0000
+
+        jz      putc               ; wait if full
+
+0xe0a0: 0x27fd jeq 0xe09c  (offset: -6)                 cycles: 2
+
+        mov.b   r5, &u1data        ; put a character
+
+0xe0a2: 0x45c2 mov.b r5, &0x0006                        cycles: 4
+0xe0a4: 0x0006
+
+        ret
+
+0xe0a6: 0x4130 ret   --  mov.w @SP+, PC                 cycles: 3
+
+
+;=======================================================
+; Get a character from the UART
+;   r5 gets the received character
+;=======================================================
+getc:   bit.b   #rxnote, &u1stat   ; RX has char?
+
+0xe0a8: 0xb3d2 bit.b #1, &0x0000                        cycles: 4
+0xe0aa: 0x0000
+
+        jz      getc               ; wait if empty
+
+0xe0ac: 0x27fd jeq 0xe0a8  (offset: -6)                 cycles: 2
+
+        mov.b   &u1data, r5        ; get a character
+
+0xe0ae: 0x4255 mov.b &0x0006, r5                        cycles: 3
+0xe0b0: 0x0006
+
+        ret
+
+0xe0b2: 0x4130 ret   --  mov.w @SP+, PC                 cycles: 3
+
+
+;=======================================================
+; Get address (4-digit ascii hex to binary)
+;   r6 gets the address in binary
+;=======================================================
+getadr: mov     #buffer, r6        ; buffer pointer
+
+0xe0b4: 0x4036 mov.w #0xe2e8, r6                        cycles: 2
+0xe0b6: 0xe2e8
+
+        mov.b   #4, r7             ; loop counter
+
+0xe0b8: 0x4267 mov.b #4, r7                             cycles: 1
+
+        mov.b   #0x20, r5          ; put a space
+
+0xe0ba: 0x4075 mov.b #0x20, r5                          cycles: 2
+0xe0bc: 0x0020
+
+        call    #putc
+
+0xe0be: 0x12b0 call #0xe09c                             cycles: 5
+0xe0c0: 0xe09c
+
+getad1: call    #getc
+
+0xe0c2: 0x12b0 call #0xe0a8                             cycles: 5
+0xe0c4: 0xe0a8
+
+        call    #putc
+
+0xe0c6: 0x12b0 call #0xe09c                             cycles: 5
+0xe0c8: 0xe09c
+
+        call    #isdig             ; check if digit
+
+0xe0ca: 0x12b0 call #0xe190                             cycles: 5
+0xe0cc: 0xe190
+
+        jnc     getad2             ; branch if digit
+
+0xe0ce: 0x2809 jlo 0xe0e2  (offset: 18)                 cycles: 2
+
+        call    #touppr
+
+0xe0d0: 0x12b0 call #0xe17e                             cycles: 5
+0xe0d2: 0xe17e
+
+        call    #ishex             ; check if a-f
+
+0xe0d4: 0x12b0 call #0xe1a4                             cycles: 5
+0xe0d6: 0xe1a4
+
+        jc      getadx             ; return if invalid
+
+0xe0d8: 0x2c03 jhs 0xe0e0  (offset: 6)                  cycles: 2
+
+        sub.b   #0x37, r5          ; hex to binary
+
+0xe0da: 0x8075 sub.b #0x37, r5                          cycles: 2
+0xe0dc: 0x0037
+
+        jmp     getad3
+
+0xe0de: 0x3c03 jmp 0xe0e6  (offset: 6)                  cycles: 2
+
+getadx: ret
+
+0xe0e0: 0x4130 ret   --  mov.w @SP+, PC                 cycles: 3
+
+getad2: sub.b   #0x30, r5          ; digit to binary
+
+0xe0e2: 0x8075 sub.b #0x30, r5                          cycles: 2
+0xe0e4: 0x0030
+
+getad3: mov.b   r5, 0(r6)
+
+0xe0e6: 0x45c6 mov.b r5, 0x0(r6)                        cycles: 4
+0xe0e8: 0x0000
+
+        add     #1, r6
+
+0xe0ea: 0x5316 add.w #1, r6                             cycles: 1
+
+        sub     #1, r7
+
+0xe0ec: 0x8317 sub.w #1, r7                             cycles: 1
+
+        jne     getad1
+
+0xe0ee: 0x23e9 jne 0xe0c2  (offset: -46)                cycles: 2
+
+getad4: mov     #buffer, r6        ; convert buffer
+
+0xe0f0: 0x4036 mov.w #0xe2e8, r6                        cycles: 2
+0xe0f2: 0xe2e8
+
+        mov.b   @r6+, r8           ; get MSB upper nibble
+
+0xe0f4: 0x4678 mov.b @r6+, r8                           cycles: 2
+
+        mov.b   @r6,  r9           ; get MSB lower nibble
+
+0xe0f6: 0x4669 mov.b @r6, r9                            cycles: 2
+
+        add.b   r8,   r8           ; shift upper nibble
+
+0xe0f8: 0x5848 add.b r8, r8                             cycles: 1
+
+        add.b   r8,   r8           ; x4
+
+0xe0fa: 0x5848 add.b r8, r8                             cycles: 1
+
+        add.b   r8,   r8           ; x8
+
+0xe0fc: 0x5848 add.b r8, r8                             cycles: 1
+
+        add.b   r8,   r8           ; x16
+
+0xe0fe: 0x5848 add.b r8, r8                             cycles: 1
+
+        add.b   r9,   r8           ; combine nibbles
+
+0xe100: 0x5948 add.b r9, r8                             cycles: 1
+
+        sub     #1,   r6           ; buffer
+
+0xe102: 0x8316 sub.w #1, r6                             cycles: 1
+
+        mov.b   r8,   r10          ; write MSB to R10
+
+0xe104: 0x484a mov.b r8, r10                            cycles: 1
+
+        swpb    r10                ; shift MSB left
+
+0xe106: 0x108a swpb r10                                 cycles: 1
+
+        add     #2,   r6           ; buffer+2
+
+0xe108: 0x5326 add.w #2, r6                             cycles: 1
+
+        mov.b   @r6+, r8           ; get LSB upper nibble
+
+0xe10a: 0x4678 mov.b @r6+, r8                           cycles: 2
+
+        mov.b   @r6,  r9           ; get LSB lower nibble
+
+0xe10c: 0x4669 mov.b @r6, r9                            cycles: 2
+
+        add.b   r8,   r8           ; shift upper nibble
+
+0xe10e: 0x5848 add.b r8, r8                             cycles: 1
+
+        add.b   r8,   r8           ; x4
+
+0xe110: 0x5848 add.b r8, r8                             cycles: 1
+
+        add.b   r8,   r8           ; x8
+
+0xe112: 0x5848 add.b r8, r8                             cycles: 1
+
+        add.b   r8,   r8           ; x16
+
+0xe114: 0x5848 add.b r8, r8                             cycles: 1
+
+        add.b   r9,   r8           ; combine nibbles
+
+0xe116: 0x5948 add.b r9, r8                             cycles: 1
+
+        add     r8,   r10          ; r10 has address
+
+0xe118: 0x580a add.w r8, r10                            cycles: 1
+
+        ret
+
+0xe11a: 0x4130 ret   --  mov.w @SP+, PC                 cycles: 3
+
+
+;=======================================================
+; Dump memory
+;   r6 has the starting binary address
+;=======================================================
+dmpmem: mov     #crlf, r4          ; print crlf
+
+0xe11c: 0x4034 mov.w #0xe1e9, r4                        cycles: 2
+0xe11e: 0xe1e9
+
+        call    #puts
+
+0xe120: 0x12b0 call #0xe08e                             cycles: 5
+0xe122: 0xe08e
+
+        mov     #0xff, r7          ; loop counter
+
+0xe124: 0x4037 mov.w #0x00ff, r7                        cycles: 2
+0xe126: 0x00ff
+
+dmpmm2: mov.b   @r10+, r5          ; get memory
+
+0xe128: 0x4a75 mov.b @r10+, r5                          cycles: 2
+
+        call    #itohex
+
+0xe12a: 0x12b0 call #0xe14a                             cycles: 5
+0xe12c: 0xe14a
+
+        mov     #temp2, r4         ; print ascii hex
+
+0xe12e: 0x4034 mov.w #0xe2f2, r4                        cycles: 2
+0xe130: 0xe2f2
+
+        call    #puts
+
+0xe132: 0x12b0 call #0xe08e                             cycles: 5
+0xe134: 0xe08e
+
+        bit.b   #0x0f, r7
+
+0xe136: 0xb077 bit.b #0x0f, r7                          cycles: 2
+0xe138: 0x000f
+
+        jne     dmpmm3
+
+0xe13a: 0x2004 jne 0xe144  (offset: 8)                  cycles: 2
+
+        mov     #crlf, r4          ;  print crlf
+
+0xe13c: 0x4034 mov.w #0xe1e9, r4                        cycles: 2
+0xe13e: 0xe1e9
+
+        call    #puts
+
+0xe140: 0x12b0 call #0xe08e                             cycles: 5
+0xe142: 0xe08e
+
+dmpmm3: sub     #1, r7
+
+0xe144: 0x8317 sub.w #1, r7                             cycles: 1
+
+        jhs     dmpmm2
+
+0xe146: 0x2ff0 jhs 0xe128  (offset: -32)                cycles: 2
+
+        ret
+
+0xe148: 0x4130 ret   --  mov.w @SP+, PC                 cycles: 3
+
+
+;=======================================================
+; Convert binary to ASCII hex
+;=======================================================
+itohex: mov     r5, r8             ; save r5
+
+0xe14a: 0x4508 mov.w r5, r8                             cycles: 1
+
+        call    #itohc
+
+0xe14c: 0x12b0 call #0xe168                             cycles: 5
+0xe14e: 0xe168
+
+        mov.b   r5, &temp1         ; lower nibble
+
+0xe150: 0x45c2 mov.b r5, &0xe2f3                        cycles: 4
+0xe152: 0xe2f3
+
+        mov     r8, r5             ; restore r5
+
+0xe154: 0x4805 mov.w r8, r5                             cycles: 1
+
+        rra     r5                 ; shift upper nibble
+
+0xe156: 0x1105 rra.w r5                                 cycles: 1
+
+        rra     r5
+
+0xe158: 0x1105 rra.w r5                                 cycles: 1
+
+        rra     r5
+
+0xe15a: 0x1105 rra.w r5                                 cycles: 1
+
+        rra     r5
+
+0xe15c: 0x1105 rra.w r5                                 cycles: 1
+
+        call    #itohc
+
+0xe15e: 0x12b0 call #0xe168                             cycles: 5
+0xe160: 0xe168
+
+        mov.b   r5, &temp2         ; upper nibble
+
+0xe162: 0x45c2 mov.b r5, &0xe2f2                        cycles: 4
+0xe164: 0xe2f2
+
+        ret
+
+0xe166: 0x4130 ret   --  mov.w @SP+, PC                 cycles: 3
+
+
+;=======================================================
+; Convert binary to ASCII hex (helper)
+;=======================================================
+itohc:  and.b   #0x0f, r5          ; lower nibble
+
+0xe168: 0xf075 and.b #0x0f, r5                          cycles: 2
+0xe16a: 0x000f
+
+        cmp.b   #0xa,  r5          ; check if < 10
+
+0xe16c: 0x9075 cmp.b #0x0a, r5                          cycles: 2
+0xe16e: 0x000a
+
+        jlo     itohc1
+
+0xe170: 0x2803 jlo 0xe178  (offset: 6)                  cycles: 2
+
+        add     #0x37, r5          ; convert a-f
+
+0xe172: 0x5035 add.w #0x0037, r5                        cycles: 2
+0xe174: 0x0037
+
+        jmp     itohc2
+
+0xe176: 0x3c02 jmp 0xe17c  (offset: 4)                  cycles: 2
+
+itohc1: add     #0x30, r5          ; convert 1-9
+
+0xe178: 0x5035 add.w #0x0030, r5                        cycles: 2
+0xe17a: 0x0030
+
+itohc2: ret
+
+0xe17c: 0x4130 ret   --  mov.w @SP+, PC                 cycles: 3
+
+
+;=======================================================
+; Convert to upper case
+;=======================================================
+touppr: cmp     #0x61, r5          ; check lower bound
+
+0xe17e: 0x9035 cmp.w #0x0061, r5                        cycles: 2
+0xe180: 0x0061
+
+        jlo     touppx             ; return if below 'a'
+
+0xe182: 0x2805 jlo 0xe18e  (offset: 10)                 cycles: 2
+
+        cmp     #0x7b, r5          ; check upper bound
+
+0xe184: 0x9035 cmp.w #0x007b, r5                        cycles: 2
+0xe186: 0x007b
+
+        jhs     touppx             ; return if above 'z'
+
+0xe188: 0x2c02 jhs 0xe18e  (offset: 4)                  cycles: 2
+
+        sub.b   #0x20, r5          ; convert to upper
+
+0xe18a: 0x8075 sub.b #0x20, r5                          cycles: 2
+0xe18c: 0x0020
+
+touppx: ret
+
+0xe18e: 0x4130 ret   --  mov.w @SP+, PC                 cycles: 3
+
+
+;=======================================================
+; Check if digit (clear carry bit if digit)
+;=======================================================
+isdig:  cmp     #0x30, r5         ; check lower bound
+
+0xe190: 0x9035 cmp.w #0x0030, r5                        cycles: 2
+0xe192: 0x0030
+
+        jlo     nodig             ; return if below '0'
+
+0xe194: 0x2805 jlo 0xe1a0  (offset: 10)                 cycles: 2
+
+        cmp     #0x3a, r5         ; check upper bound
+
+0xe196: 0x9035 cmp.w #0x003a, r5                        cycles: 2
+0xe198: 0x003a
+
+        jhs     nodig             ; return if above '9'
+
+0xe19a: 0x2c02 jhs 0xe1a0  (offset: 4)                  cycles: 2
+
+        bic     #0x1,  r2         ; is digit: clear carry
+
+0xe19c: 0xc312 clrc  --  bic.w #1, SR                   cycles: 1
+
+        ret
+
+0xe19e: 0x4130 ret   --  mov.w @SP+, PC                 cycles: 3
+
+nodig:  bis     #0x1,  r2         ; no digit: set carry
+
+0xe1a0: 0xd312 setc  --  bis.w #1, SR                   cycles: 1
+
+        ret
+
+0xe1a2: 0x4130 ret   --  mov.w @SP+, PC                 cycles: 3
+
+
+;=======================================================
+; Check if hex A-F (clear carry bit if hex)
+;=======================================================
+ishex:  cmp     #0x41, r5         ; check lower bound
+
+0xe1a4: 0x9035 cmp.w #0x0041, r5                        cycles: 2
+0xe1a6: 0x0041
+
+        jlo     nohex             ; return if below 'A'
+
+0xe1a8: 0x2805 jlo 0xe1b4  (offset: 10)                 cycles: 2
+
+        cmp     #0x47, r5         ; check upper bound
+
+0xe1aa: 0x9035 cmp.w #0x0047, r5                        cycles: 2
+0xe1ac: 0x0047
+
+        jhs     nohex             ; return if above 'F'
+
+0xe1ae: 0x2c02 jhs 0xe1b4  (offset: 4)                  cycles: 2
+
+        bic     #0x1,  r2         ; is hex: clear carry
+
+0xe1b0: 0xc312 clrc  --  bic.w #1, SR                   cycles: 1
+
+        ret
+
+0xe1b2: 0x4130 ret   --  mov.w @SP+, PC                 cycles: 3
+
+nohex:  bis     #0x1,  r2         ; no hex: set carry
+
+0xe1b4: 0xd312 setc  --  bis.w #1, SR                   cycles: 1
+
+        ret
+
+0xe1b6: 0x4130 ret   --  mov.w @SP+, PC                 cycles: 3
+
+
+;===========================================================
+; Wait
+;===========================================================
+wait1:  mov  #tm5sec, &t1icnt      ; initial count
+
+0xe1b8: 0x40b2 mov.w #0x1388, &0x000a                   cycles: 5
+0xe1ba: 0x1388
+0xe1bc: 0x000a
+
+        mov  #tmstrt, &t1cntl      ; start timer
+
+0xe1be: 0x4392 mov.w #1, &0x0008                        cycles: 4
+0xe1c0: 0x0008
+
+wait2:  bit  #tmdone, &t1stat      ; check status
+
+0xe1c2: 0xb392 bit.w #1, &0x0008                        cycles: 4
+0xe1c4: 0x0008
+
+        jz   wait2                 ; loop if not done
+
+0xe1c6: 0x27fd jeq 0xe1c2  (offset: -6)                 cycles: 2
+
+        mov  #tmstop, &t1cntl      ; stop timer
+
+0xe1c8: 0x4382 mov.w #0, &0x0008                        cycles: 4
+0xe1ca: 0x0008
+
+        ret
+
+0xe1cc: 0x4130 ret   --  mov.w @SP+, PC                 cycles: 3
+
+
+
+;===========================================================
+; Strings and data
+;===========================================================
+
+banner: .db     0x0d,0x0a
+        .ascii  "Welcome to MSP430 Monitor"
+crlf:   .db     0x0d,0x0a,0
+
+prompt: .db     0x0d,0x0a,0x3e,0x20,0
+
+hlpmsg: .db     0x0d,0x0a,0x0d,0x0a
+        .ascii  "Command Summary:"
+        .db     0x0d,0x0a
+        .ascii  "h      .. print this help message"
+        .db     0x0d,0x0a
+        .ascii  "c      .. clear screen"
+        .db     0x0d,0x0a
+        .ascii  "r      .. soft reset"
+        .db     0x0d,0x0a
+        .ascii  "o      .. toggle output port"
+        .db     0x0d,0x0a
+        .ascii  "g addr .. jump to address"
+        .db     0x0d,0x0a
+        .ascii  "d addr .. dump mem at address"
+        .db     0x0d,0x0a,0x0d,0x0a,0
+
+unknwn: .db     0x0d,0x0a
+        .ascii  "Unknown Command"
+        .db     0x0d,0x0a,0
+
+nonoct: .db     0x0d,0x0a
+        .ascii  "Non-Octal Address"
+        .db     0x0d,0x0a,0
+
+clrscr: .db     0x1b,0x5b,0x32,0x4a
+        .db     0x1b,0x5b,0x31,0x3b,0x31,0x48,0
+
+buffer: .db     0,0,0,0,0,0,0,0
+        .db     0,0
+
+temp2:  .db     0
+temp1:  .db     0
+        .db     0,0
+
+.org 0xfffe
+
+        dw start
+
+data sections:
+e1ce: 0d 0a 57 65 6c 63 6f 6d 65 20 74 6f 20 4d 53 50  ..Welcome to MSP
+e1de: 34 33 30 20 4d 6f 6e 69 74 6f 72 0d 0a 00 0d 0a  430 Monitor.....
+e1ee: 3e 20 00 0d 0a 0d 0a 43 6f 6d 6d 61 6e 64 20 53  > .....Command S
+e1fe: 75 6d 6d 61 72 79 3a 0d 0a 68 20 20 20 20 20 20  ummar.:..h      
+e20e: 2e 2e 20 70 72 69 6e 74 20 74 68 69 73 20 68 65  .. print this he
+e21e: 6c 70 20 6d 65 73 73 61 67 65 0d 0a 63 20 20 20  lp message..c   
+e22e: 20 20 20 2e 2e 20 63 6c 65 61 72 20 73 63 72 65     .. clear scre
+e23e: 65 6e 0d 0a 72 20 20 20 20 20 20 2e 2e 20 73 6f  en..r      .. so
+e24e: 66 74 20 72 65 73 65 74 0d 0a 6f 20 20 20 20 20  ft reset..o     
+e25e: 20 2e 2e 20 74 6f 67 67 6c 65 20 6f 75 74 70 75   .. toggle outpu
+e26e: 74 20 70 6f 72 74 0d 0a 67 20 61 64 64 72 20 2e  t port..g addr .
+e27e: 2e 20 6a 75 6d 70 20 74 6f 20 61 64 64 72 65 73  . jump to addres
+e28e: 73 0d 0a 64 20 61 64 64 72 20 2e 2e 20 64 75 6d  s..d addr .. dum
+e29e: 70 20 6d 65 6d 20 61 74 20 61 64 64 72 65 73 73  p mem at address
+e2ae: 0d 0a 0d 0a 00 0d 0a 55 6e 6b 6e 6f 77 6e 20 43  .......Unknown C
+e2be: 6f 6d 6d 61 6e 64 0d 0a 00 0d 0a 4e 6f 6e 2d 4f  ommand.....Non-O
+e2ce: 63 74 61 6c 20 41 64 64 72 65 73 73 0d 0a 00 1b  ctal Address....
+e2de: 5b 32 4a 1b 5b 31 3b 31 48 00 00 00 00 00 00 00  [2J.[1;1H.......
+e2ee: 00 00 00 00 00 00 00 00                          ........
+fffe: 00 e0                                            ..
+
+
+Program Info:
+Include Paths: .
+               /usr/local/share/naken_asm/include
+ Instructions: 155
+   Code Bytes: 462
+   Data Bytes: 298
+  Low Address: e000 (57344)
+ High Address: ffff (65535)
+
